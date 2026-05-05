@@ -12,7 +12,7 @@ export const API_CONFIG = {
 export async function apiCall<T>(
   endpoint: string,
   options: RequestInit = {}
- ): Promise<ApiResponse<T>> {
+): Promise<ApiResponse<T>> {
   try {
     const url = `${API_CONFIG.baseURL}${endpoint}`;
 
@@ -41,10 +41,11 @@ export async function apiCall<T>(
       clearTimeout(timeoutId);
     }
 
-    // Intentar parsear como JSON; si falla, devolver el texto como error
+    // Intentar parsear como JSON
     let data: T | undefined;
     let errorMsg: string | undefined;
     const contentType = response.headers.get("content-type") || "";
+
     if (contentType.includes("application/json")) {
       const json = await response.json();
       if (response.ok) {
@@ -66,13 +67,12 @@ export async function apiCall<T>(
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      console.error("API Timeout:", endpoint);
       return {
         error: "La solicitud tardó demasiado. Verifica tu conexión.",
         status: 408,
       };
     }
-    console.error("API Error:", error);
+
     return {
       error: error instanceof Error ? error.message : "Error desconocido",
       status: 500,
@@ -81,41 +81,45 @@ export async function apiCall<T>(
 }
 
 /**
- * Login de usuario
+ * Login de usuario — AHORA CON ERRORES REALES
  */
-export async function login(correo: string, password: string): Promise<LoginResponse | null> {
+export async function login(
+  correo: string,
+  password: string
+): Promise<LoginResponse> {
   const response = await apiCall<LoginResponse>("/usuarios/login", {
     method: "POST",
     body: JSON.stringify({ correo, password }),
   });
 
-  if (response.status === 200 && response.data) {
-    localStorage.setItem("token", response.data.token);
-    localStorage.setItem("usuario", JSON.stringify(response.data.usuario));
-    return response.data;
+  if (!response.status || response.status >= 400) {
+    throw new Error(response.error || "Credenciales incorrectas");
   }
 
-  return null;
+  localStorage.setItem("token", response.data!.token);
+  localStorage.setItem("usuario", JSON.stringify(response.data!.usuario));
+
+  return response.data!;
 }
 
 /**
- * Registro de usuario
+ * Registro de usuario — AHORA CON ERRORES REALES
  */
 export async function registro(
   nombre: string,
   correo: string,
   password: string
-): Promise<RegistroResponse | null> {
+): Promise<RegistroResponse> {
   const response = await apiCall<RegistroResponse>("/usuarios/registro", {
     method: "POST",
     body: JSON.stringify({ nombre, correo, password }),
   });
 
-  if (response.status === 201 && response.data) {
-    return response.data;
+  if (!response.status || response.status >= 400) {
+    throw new Error(response.error || "No se pudo registrar");
   }
 
-  return null;
+  return response.data!;
 }
 
 /**
@@ -134,7 +138,6 @@ export function getUsuarioLocal(): Usuario | null {
     const usuario = localStorage.getItem("usuario");
     return usuario ? (JSON.parse(usuario) as Usuario) : null;
   } catch {
-    // Si el JSON está corrupto, limpiar y retornar null
     localStorage.removeItem("usuario");
     return null;
   }
